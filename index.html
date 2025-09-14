@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Фото‑конструктор — интерактивный сайт</title>
+  <style>
+    :root{
+      --bg: #0b0b0f; --text:#e8e8ef; --muted:#999; --accent:#9b87f5; --ok:#68d391; --bad:#ef4444;
+    }
+    *{box-sizing:border-box}
+    html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial}
+    button,input{font:inherit}
+    .center{display:flex;align-items:center;justify-content:center}
+    .scene{position:relative;min-height:100dvh;padding:24px;display:none}
+    .scene.active{display:block}
+    .card{max-width:1080px;margin:0 auto;background:#101018;border:1px solid #1b1b26;border-radius:20px;box-shadow:0 10px 30px rgba(0,0,0,.35);padding:28px}
+    .title{font-size:clamp(18px,2.8vw,30px);font-weight:700;margin:0 0 12px}
+    .sub{color:var(--muted);margin:6px 0 18px}
+    .row{display:flex;gap:16px;flex-wrap:wrap}
+    .btn{background:linear-gradient(135deg,#7c3aed,#22d3ee);border:0;color:white;padding:10px 16px;border-radius:12px;cursor:pointer}
+    .btn:disabled{opacity:.6;cursor:not-allowed}
+    .ghost{background:transparent;border:1px solid #303046;color:#d7d7e9}
+
+    /* —— Имя пользователя (модал) —— */
+    .modal{position:fixed;inset:0;background:rgba(5,6,12,.75);backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:center;z-index:1000}
+    .modal-card{background:#0f1016;border:1px solid #242438;border-radius:18px;padding:24px;max-width:480px;width:92%}
+    .modal h1{margin:0 0 8px;font-size:24px}
+    .field{display:flex;gap:8px;margin-top:14px}
+    .field input{flex:1;background:#141627;border:1px solid #2a2d46;border-radius:12px;padding:12px 14px;color:#fff;outline:none}
+
+    /* —— ПАЗЛЫ —— */
+    .puzzle-wrap{display:grid;grid-template-columns:1fr;gap:18px}
+    .stage{position:relative;aspect-ratio:1/1;background:#0b0b13;border:1px dashed #2a2a3a;border-radius:18px;overflow:hidden}
+    .silhouette{position:absolute;inset:0;background-size:contain;background-repeat:no-repeat;background-position:center;filter:grayscale(1) contrast(.8) opacity(.45)}
+    .board{position:relative;min-height:180px;border:1px dashed #2d2d3d;border-radius:14px;padding:12px;display:flex;flex-wrap:wrap;gap:10px;align-content:flex-start}
+    .piece{position:absolute;touch-action:none;user-select:none;cursor:grab;transition:box-shadow .2s ease}
+    .piece:active{cursor:grabbing;box-shadow:0 6px 16px rgba(0,0,0,.45)}
+    .target{position:absolute;border:2px dashed rgba(255,255,255,.15);border-radius:10px;transform:translate(-50%, -50%);width:80px;height:80px}
+    .snap{outline:2px solid rgba(103,232,249,.6);border-style:solid}
+    .done-badge{position:absolute;top:10px;right:10px;background:#0f172a;color:#a7f3d0;border:1px solid #134e4a;padding:6px 10px;border-radius:999px;font-size:12px;display:none}
+    .stage.completed .done-badge{display:block}
+
+    /* —— ПЕЧАТНАЯ СЦЕНА —— */
+    .typewriter{font-family:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;font-size:clamp(16px,2.4vw,26px);line-height:1.5;white-space:pre-wrap;min-height:40vh}
+
+    /* —— СЦЕНА С СКОБОЧКАМИ —— */
+    .flood{font:700 clamp(18px,3vw,40px)/1.2 ui-monospace,monospace;word-wrap:break-word}
+
+    /* —— ЧЁРНЫЕ ФЛАГИ —— */
+    .flags-area{position:relative;min-height:70vh;border:1px solid #24243a;border-radius:18px;overflow:hidden}
+    .flag{position:absolute;cursor:pointer;user-select:none}
+
+    /* —— ФОНАРИК И КОТЯТА —— */
+    .darkfield{position:relative;height:70vh;border-radius:18px;overflow:hidden;background:#000}
+    .darkfield .mask{position:absolute;inset:0;background:radial-gradient(circle 90px at var(--x,50%) var(--y,50%), rgba(255,255,255,.12), rgba(0,0,0,.92) 60%) mix-blend:normal;pointer-events:none}
+    .kitty{position:absolute;width:120px;height:auto;filter:grayscale(1) brightness(.85);cursor:pointer}
+    .tooltip{position:absolute;padding:6px 10px;background:#111827;border:1px solid #374151;border-radius:10px;font-size:12px;transform:translate(-50%, -120%);white-space:nowrap;display:none}
+
+    /* —— ЗВЁЗДЫ И СОЗВЕЗДИЯ —— */
+    .sky{position:relative;height:76vh;border-radius:18px;background:radial-gradient(1200px 600px at 60% -10%,#1b1d3a,#090a14 60%,#04050a 100%);overflow:hidden}
+    .star{position:absolute;width:2px;height:2px;background:#fff;border-radius:50%;opacity:.9}
+    .star:hover::after{content:attr(data-tip);position:absolute;left:10px;top:-6px;background:#0b1020;border:1px solid #1f2a44;padding:6px 8px;border-radius:8px;font-size:12px;color:#dbeafe;white-space:nowrap}
+    .constellation{position:absolute;pointer-events:auto}
+    .constellation path{stroke:#a78bfa;stroke-width:2;fill:none;filter:drop-shadow(0 0 6px rgba(167,139,250,.5))}
+    .constellation:hover::after{content:attr(data-label);position:absolute;left:6px;top:-22px;background:#0f1020;border:1px solid #262b5a;padding:6px 8px;border-radius:8px;font-size:12px;color:#e9d5ff}
+    .boom{position:absolute;inset:0;pointer-events:none}
+
+    /* —— САЛЮТЫ И ФИНАЛ —— */
+    .fireworks{position:relative;height:70vh;border-radius:18px;background:radial-gradient(800px 500px at 50% -10%,#111,#000)}
+    .greet{font-size:clamp(18px,3.4vw,42px);text-align:center;margin-top:12px}
+    .heart{display:inline-block;border:1px solid #1f2937;background:#0b0b0f;color:#fff;padding:8px 12px;border-radius:999px;cursor:pointer}
+    .secret{margin-top:16px;display:none;text-align:center}
+
+    /* helpers */
+    .fade-enter{animation:fade .5s ease both}
+    @keyframes fade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+  </style>
+  <!--
+  ⚙️ Как подключить свои изображения из архива 2.zip
+  Разложите файлы так (в той же папке, где HTML):
+  assets/
+    task1/
+      silhouette.png            — полупрозрачный силуэт для пазла №1
+      pieces/
+        p1.png p2.png p3.png p4.png ... — части тела
+    task2/ (аналогично)
+    task3/ (аналогично)
+  Котята:
+    assets/kittens/black.png, assets/kittens/white.png (или любые ваши имена — поправьте пути в CONFIG ниже)
+  Все координаты целей заданы в процентах — при необходимости подстройте в PUZZLES_CONFIG.
+  -->
+</head>
+<body>
+  <!-- Модал: ввод имени -->
+  <div id="nameModal" class="modal">
+    <div class="modal-card">
+      <h1>Привет! Как тебя зовут? 🙂</h1>
+      <p class="sub">Имя нужно один раз — чтобы персонализировать поздравление.</p>
+      <div class="field">
+        <input id="nameInput" type="text" placeholder="Введите имя" maxlength="24" />
+        <button class="btn" id="nameGo">Продолжить</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Сцена 1–3: пазлы -->
+  <section class="scene active" id="scene-puzzles">
+    <div class="card">
+      <h2 class="title">Собери фото по частям</h2>
+      <p class="sub">Перетаскивай элементы на силуэт. Нужно решить 3 задания подряд.</p>
+      <div class="puzzle-wrap">
+        <div class="stage" id="stage">
+          <div class="done-badge">Готово ✓</div>
+          <div class="silhouette" id="silhouette"></div>
+          <!-- цели и кусочки появятся скриптом -->
+        </div>
+        <div class="row">
+          <button id="resetPuzzle" class="btn ghost">Сбросить задание</button>
+          <button id="nextPuzzle" class="btn" disabled>Дальше</button>
+        </div>
+        <p class="sub" id="puzzleProgress"></p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Сцена 4: печатная машинка + «)» -->
+  <section class="scene" id="scene-typewriter">
+    <div class="card center" style="min-height:70vh;flex-direction:column;gap:16px">
+      <div id="typewriter" class="typewriter"></div>
+      <div id="flood" class="flood" style="display:none"></div>
+    </div>
+  </section>
+
+  <!-- Сцена 5: 6 чёрных флагов -->
+  <section class="scene" id="scene-flags">
+    <div class="card">
+      <h2 class="title">Найди 6 чёрных флагов 🏴</h2>
+      <p class="sub">С каждым найденным флагом следующий мельче, но заметен.</p>
+      <div class="flags-area" id="flagsArea"></div>
+      <div class="row" style="margin-top:12px;justify-content:space-between">
+        <span class="sub">Осталось: <b id="flagsLeft">6</b></span>
+        <button id="flagsNext" class="btn" disabled>Дальше</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Сцена 6: фонарик и котята -->
+  <section class="scene" id="scene-kittens">
+    <div class="card">
+      <h2 class="title">Найди нас во тьме</h2>
+      <p class="sub">Двигай курсор — свет фонарика поможет. Наведи на котят.</p>
+      <div class="darkfield" id="darkfield">
+        <img id="kittyBlack" class="kitty" alt="Чёрный котёнок" />
+        <img id="kittyWhite" class="kitty" alt="Белый котёнок" />
+        <div id="kittyTip" class="tooltip">Это мы</div>
+        <div class="mask" id="mask"></div>
+      </div>
+      <div class="row" style="justify-content:flex-end;margin-top:12px">
+        <button id="kittensNext" class="btn" disabled>Дальше</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Сцена 7: звёзды, Рак и Дева -->
+  <section class="scene" id="scene-stars">
+    <div class="card">
+      <h2 class="title">Звёздная сцена ✨</h2>
+      <p class="sub">Наводи на свободные звёзды — они шепчут комплименты для Яны. На созвездиях подсказки.</p>
+      <div class="sky" id="sky">
+        <!-- свободные звёзды и подсказки добавит скрипт -->
+        <svg class="constellation" id="cancer" data-label="Это я" viewBox="0 0 300 200" width="300" height="200" style="left:8%;top:18%">
+          <path d="M20,150 L80,120 L150,100 L220,70 L280,40"/>
+          <circle cx="20" cy="150" r="2" fill="#fff"/><circle cx="80" cy="120" r="2" fill="#fff"/>
+          <circle cx="150" cy="100" r="2" fill="#fff"/><circle cx="220" cy="70" r="2" fill="#fff"/>
+          <circle cx="280" cy="40" r="2" fill="#fff"/>
+        </svg>
+        <svg class="constellation" id="virgo" data-label="Это ты" viewBox="0 0 300 220" width="320" height="220" style="right:6%;top:24%">
+          <path d="M20,40 L90,60 L140,100 L190,80 L250,140 L290,200"/>
+          <circle cx="20" cy="40" r="2" fill="#fff"/><circle cx="90" cy="60" r="2" fill="#fff"/>
+          <circle cx="140" cy="100" r="2" fill="#fff"/><circle cx="190" cy="80" r="2" fill="#fff"/>
+          <circle cx="250" cy="140" r="2" fill="#fff"/><circle cx="290" cy="200" r="2" fill="#fff"/>
+        </svg>
+        <canvas class="boom" id="boom"></canvas>
+      </div>
+      <div class="row" style="justify-content:flex-end;margin-top:12px">
+        <button id="starsNext" class="btn" disabled>Дальше</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Сцена 8: финал с салютами и поздравлением -->
+  <section class="scene" id="scene-final">
+    <div class="card">
+      <div class="fireworks" id="fireworks"></div>
+      <div class="greet" id="greet"></div>
+      <p class="sub" style="text-align:center">Нажми на чёрное сердце ↓</p>
+      <div class="center">
+        <button class="heart" id="heart">🖤</button>
+      </div>
+      <div class="secret" id="secret">
+        <div style="font-size:clamp(16px,2.2vw,28px);line-height:1.5">Я долго думал как сказать, а ты знаешь, что я люблю если и делать простые вещи(такие как признание в любви), то с размахом. Станешь моей готкой и согласна ли вступить со мной на этот нелегкий путь?🖤</div>
+      </div>
+    </div>
+  </section>
+
+  <script>
+    // ======== НАСТРОЙКИ / КОНФИГ ========
+    const USER = { name: null };
+
+    // Пазлы: для каждого задания — силуэт, список кусков и целевые координаты (в % от контейнера)
+    // ⚠️ Подставьте свои пути из архива 2.zip
+    const PUZZLES_CONFIG = [
+  {
+    silhouette: 'assets/task1/1silhouette.png',
+    pieces: [
+      { src: 'assets/task1/p1/1body.png', w: 180, h: 180, target: { x: 45, y: 60 } },
+      { src: 'assets/task1/p1/1head.png', w: 140, h: 140, target: { x: 47, y: 25 } },
+      { src: 'assets/task1/p1/1leftarm.png', w: 150, h: 150, target: { x: 35, y: 55 } },
+      { src: 'assets/task1/p1/1righarm.png', w: 150, h: 150, target: { x: 60, y: 55 } },
+    ]
+  },
+  ];
+
+    // Котята (пути к картинкам)
+    const KITTENS = {
+      black: 'assets/kittens/black.png',
+      white: 'assets/kittens/white.png'
+    };
+
+    // Комплименты для Яны (показываются на звёздах)
+    const COMPLIMENTS = [
+      'Яна, ты сияешь ярче Веги',
+      'Яна, твоя улыбка — мой Космос',
+      'Яна, с тобой спокойно, как в невесомости',
+      'Яна, ты — север для моего компаса',
+      'Яна, рядом с тобой даже туманности тают',
+      'Яна, твоё сердце — моя Галактика',
+      'Яна, ты прекрасна до бесконечности',
+      'Яна, ты — моё счастливое созвездие'
+    ];
+
+    // ======== УТИЛИТЫ ========
+    const $ = s => document.querySelector(s);
+    const $$ = s => Array.from(document.querySelectorAll(s));
+    const delay = ms => new Promise(r => setTimeout(r, ms));
+
+    function showScene(id){ $$('.scene').forEach(sc=>sc.classList.remove('active')); $(id).classList.add('active'); }
+
+    // ======== ЗАПРОС ИМЕНИ ========
+    const modal = $('#nameModal'), nameInput = $('#nameInput'), nameGo = $('#nameGo');
+    nameGo.addEventListener('click', ()=>{
+      const v = nameInput.value.trim();
+      if(!v) return nameInput.focus();
+      USER.name = v;
+      localStorage.setItem('userName', v);
+      modal.remove();
+      startPuzzles();
+    });
+    nameInput.addEventListener('keydown', e=>{ if(e.key==='Enter') nameGo.click(); });
+    // если имя уже сохранено — можно автоподставить
+    const saved = localStorage.getItem('userName');
+    if(saved){ USER.name = saved; nameInput.value = saved; }
+
+    // ======== ПАЗЛЫ (3 задания) ========
+    let puzzleIndex = 0;
+    const stage = $('#stage');
+    const silhouette = $('#silhouette');
+    const nextPuzzleBtn = $('#nextPuzzle');
+    const resetPuzzleBtn = $('#resetPuzzle');
+    const puzzleProgress = $('#puzzleProgress');
+
+    function startPuzzles(){
+      showScene('#scene-puzzles');
+      loadPuzzle(puzzleIndex);
+    }
+
+    function loadPuzzle(idx){
+      nextPuzzleBtn.disabled = true;
+      stage.classList.remove('completed');
+      stage.querySelectorAll('.piece,.target').forEach(n=>n.remove());
+      const conf = PUZZLES_CONFIG[idx];
+      silhouette.style.backgroundImage = `url('${conf.silhouette}')`;
+      // Создаём цели
+      conf.pieces.forEach((p, i)=>{
+        const t = document.createElement('div');
+        t.className = 'target';
+        t.style.left = p.target.x + '%';
+        t.style.top  = p.target.y + '%';
+        t.dataset.i = i;
+        stage.appendChild(t);
+      });
+      // Разбрасываем кусочки
+      conf.pieces.forEach((p, i)=>{
+        const img = document.createElement('img');
+        img.className = 'piece';
+        img.src = p.src; img.width = p.w; img.height = p.h;
+        // случайная позиция
+        const rX = 10 + Math.random()*80;
+        const rY = 10 + Math.random()*80;
+        img.style.left = rX + '%';
+        img.style.top  = rY + '%';
+        img.dataset.i = i;
+        makeDraggable(img);
+        stage.appendChild(img);
+      });
+      updatePuzzleProgress();
+    }
+
+    function updatePuzzleProgress(){
+      puzzleProgress.textContent = `Задание ${puzzleIndex+1} из ${PUZZLES_CONFIG.length}`;
+    }
+
+    resetPuzzleBtn.addEventListener('click', ()=>loadPuzzle(puzzleIndex));
+    nextPuzzleBtn.addEventListener('click', ()=>{
+      puzzleIndex++;
+      if(puzzleIndex < PUZZLES_CONFIG.length){
+        loadPuzzle(puzzleIndex);
+      } else {
+        // к печатной сцене
+        typewriterScene();
+      }
+    });
+
+    function makeDraggable(el){
+      let sx=0, sy=0, ox=0, oy=0, dragging=false, placed=false;
+      const onDown = e=>{
+        if(placed) return; dragging=true; el.style.zIndex=10; const pt = getPoint(e); sx = pt.x; sy = pt.y; const r = el.getBoundingClientRect(); ox = r.left; oy = r.top; e.preventDefault(); };
+      const onMove = e=>{
+        if(!dragging || placed) return; const pt = getPoint(e); const dx = pt.x - sx; const dy = pt.y - sy; el.style.left = (ox + dx - stage.getBoundingClientRect().left) + 'px'; el.style.top = (oy + dy - stage.getBoundingClientRect().top) + 'px'; };
+      const onUp = ()=>{
+        if(!dragging || placed) return; dragging=false; el.style.zIndex=1; // Проверка на ближайшую цель
+        const targets = $$('.target');
+        let snapped = false;
+        for(const t of targets){ if(t.dataset.i !== el.dataset.i) continue; // правильная цель — по индексу
+          const tr = t.getBoundingClientRect();
+          const er = el.getBoundingClientRect();
+          const dist = Math.hypot((er.left+er.width/2)-(tr.left+tr.width/2), (er.top+er.height/2)-(tr.top+tr.height/2));
+          if(dist < 40){ // радиус захвата
+            // «прилипание»
+            el.style.left = (tr.left + tr.width/2 - stage.getBoundingClientRect().left - el.width/2) + 'px';
+            el.style.top  = (tr.top  + tr.height/2 - stage.getBoundingClientRect().top  - el.height/2) + 'px';
+            el.classList.add('snap');
+            placed = true; snapped = true; break;
+          }
+        }
+        if(!snapped){ el.classList.remove('snap'); }
+        // Проверка завершения
+        const allPlaced = $$('.piece').every(p=>p.classList.contains('snap'));
+        if(allPlaced){ stage.classList.add('completed'); nextPuzzleBtn.disabled = false; }
+      };
+      el.addEventListener('mousedown', onDown); window.addEventListener('mousemove', onMove); window.addEventListener('mouseup', onUp);
+      el.addEventListener('touchstart', e=>onDown(e.touches[0]), {passive:false});
+      window.addEventListener('touchmove', e=>onMove(e.touches[0]), {passive:false});
+      window.addEventListener('touchend', onUp);
+    }
+    function getPoint(e){ return { x: e.clientX, y: e.clientY }; }
+
+    // ======== СЦЕНА ПЕЧАТНОЙ МАШИНКИ + «)» ========
+    async function typewriterScene(){
+      showScene('#scene-typewriter');
+      const tw = $('#typewriter');
+      const flood = $('#flood');
+      const text = 'Ты действительно думаешь, что это всё?';
+      tw.textContent = '';
+      const audio = $('#keySound');
+      for(const ch of text){
+        tw.textContent += ch;
+        try{ audio.currentTime = 0; audio.play().catch(()=>{});}catch{}
+        await delay(70);
+      }
+      await delay(700);
+      // Заливка скобочками
+      tw.textContent = '';
+      flood.style.display = 'block';
+      const width = window.innerWidth; const height = window.innerHeight;
+      const targetLen = Math.ceil((width*height)/5000); // грубая оценка
+      let s = '';
+      for(let i=0;i<targetLen;i++){ s += ')'; if(i%90===0) s+='\n'; }
+      // Быстрый вывод пачками
+      let idx=0;
+      const chunk=60;
+      await new Promise(res=>{
+        const iv = setInterval(()=>{
+          flood.textContent += s.slice(idx, idx+chunk);
+          idx+=chunk;
+          if(idx>=s.length){ clearInterval(iv); res(); }
+        }, 12);
+      });
+      await delay(300);
+      flagsScene();
+    }
+
+    // ======== СЦЕНА С ФЛАГАМИ ========
+    function flagsScene() {
+  showScene('#scene-flags');
+  const area = $('#flagsArea');
+  area.innerHTML = '';  // Очищаем область с флагами
+  const leftEl = $('#flagsLeft');
+  const next = $('#flagsNext');
+  next.disabled = true;
+  let count = 6;
+  leftEl.textContent = count;
+
+  for (let i = 0; i < 6; i++) {
+    const span = document.createElement('span');
+    span.className = 'flag fade-enter';
+    span.textContent = '🏴';
+    const size = 48 - i * 6;
+    span.style.fontSize = size + 'px';
+    span.style.left = (Math.random() * 90 + 3) + '%';
+    span.style.top = (Math.random() * 80 + 8) + '%';
+
+    // Добавляем обработчик клика на флаг
+    span.addEventListener('click', () => {
+      if (span.dataset.hit) return; // Если флаг уже найден, не реагируем
+      span.dataset.hit = '1';       // Отмечаем флаг как найденный
+      span.style.opacity = 0.25;    // Уменьшаем прозрачность флага
+      count--;                      // Уменьшаем счетчик оставшихся флагов
+      leftEl.textContent = count;
+
+      // Убираем флаг из области
+      span.remove();                // Удаляем флаг из DOM
+
+      if (count === 0) next.disabled = false;
+      playFlagClickSound(); // Звук при клике на флажок
+    });
+
+    area.appendChild(span); // Добавляем флаг на страницу
+  }
+
+  next.onclick = kittensScene;
+}
+    // ======== СЦЕНА ФОНАРИКА И КОТЯТ ========
+    function kittensScene(){
+      showScene('#scene-kittens');
+      const field = $('#darkfield'); const mask = $('#mask'); const tip = $('#kittyTip');
+      const kB = $('#kittyBlack'); const kW = $('#kittyWhite');
+      kB.src = KITTENS.black; kW.src = KITTENS.white;
+      // случайно, но рядом друг с другом
+      const x = 40 + Math.random()*20; const y = 42 + Math.random()*16;
+      kB.style.left = x+'%'; kB.style.top = y+'%';
+      kW.style.left = (x+8)+'%'; kW.style.top = (y+2)+'%';
+      const showTip = e=>{ tip.style.left = e.clientX+'px'; tip.style.top = e.clientY+'px'; tip.style.display='block'; };
+      const hideTip = ()=>{ tip.style.display='none'; };
+      [kB,kW].forEach(k=>{
+        k.addEventListener('mousemove', showTip);
+        k.addEventListener('mouseleave', hideTip);
+        k.addEventListener('mouseenter', ()=>{ tip.textContent='Это мы'; });
+        k.addEventListener('click', ()=>{ $('#kittensNext').disabled=false; });
+      });
+      field.addEventListener('mousemove', e=>{
+        const r = field.getBoundingClientRect();
+        const x = ((e.clientX - r.left)/r.width*100).toFixed(2)+'%';
+        const y = ((e.clientY - r.top)/r.height*100).toFixed(2)+'%';
+        mask.style.setProperty('--x', x); mask.style.setProperty('--y', y);
+      });
+      $('#kittensNext').onclick = starsScene;
+    }
+
+    // ======== СЦЕНА ЗВЁЗД И СОЗВЕЗДИЙ ========
+    function starsScene(){
+      showScene('#scene-stars');
+      const sky = $('#sky');
+      // Свободные звёзды с комплиментами
+      for(let i=0;i<36;i++){
+        const d = document.createElement('div'); d.className='star';
+        d.style.left = (Math.random()*96+2)+'%'; d.style.top = (Math.random()*92+3)+'%';
+        const tip = COMPLIMENTS[Math.floor(Math.random()*COMPLIMENTS.length)].replace('Яна', 'Яна');
+        d.dataset.tip = tip;
+        sky.appendChild(d);
+      }
+      // Анимация сближения и взрыв
+      let hitCancer=false, hitVirgo=false;
+      const cancer = $('#cancer'); const virgo = $('#virgo'); const boom = $('#boom');
+      const hover = (who)=>{ if(who==='c') hitCancer=true; else hitVirgo=true; check(); };
+      cancer.addEventListener('mouseenter', ()=>hover('c'));
+      virgo.addEventListener('mouseenter', ()=>hover('v'));
+      function check(){
+        if(hitCancer && hitVirgo){
+          // плавное сближение
+          cancer.animate([{transform:'translateX(0)'},{transform:'translateX(80px)'}],{duration:900,fill:'forwards',easing:'ease-in-out'});
+          virgo.animate([{transform:'translateX(0)'},{transform:'translateX(-80px)'}],{duration:900,fill:'forwards',easing:'ease-in-out'});
+          setTimeout(()=>explode(boom), 950);
+        }
+      }
+      $('#starsNext').disabled = true;
+      boom.width = sky.clientWidth; boom.height = sky.clientHeight;
+      function explode(cv){
+        const ctx = cv.getContext('2d');
+        const cx = cv.width/2, cy = cv.height/2; const parts=[];
+        for(let i=0;i<220;i++){
+          const a = Math.random()*Math.PI*2; const sp = 1+Math.random()*3; parts.push({x:cx,y:cy,dx:Math.cos(a)*sp,dy:Math.sin(a)*sp,life:60+Math.random()*40});
+        }
+        let t=0; const raf = ()=>{
+          t++; ctx.fillStyle='rgba(0,0,0,0.18)'; ctx.fillRect(0,0,cv.width,cv.height);
+          parts.forEach(p=>{ p.x+=p.dx; p.y+=p.dy; p.life--; ctx.fillStyle='rgba(255,255,255,.9)'; ctx.fillRect(p.x,p.y,2,2);});
+          if(t<120) requestAnimationFrame(raf); else { $('#starsNext').disabled=false; }
+        }; raf();
+      }
+      $('#starsNext').onclick = finalScene;
+    }
+
+    // ======== ФИНАЛ: САЛЮТЫ + ПОЗДРАВЛЕНИЕ ========
+    function finalScene(){
+      showScene('#scene-final');
+      const fw = $('#fireworks'); const greet = $('#greet');
+      // Поздравление
+      const name = USER.name || localStorage.getItem('userName') || 'друг';
+      greet.innerHTML = `Придумала ещё «${name}» —<br>С днём рождения! Пусть счастье искрится в твоём небе. 🖤`;
+      // Простые фейерверки на canvas
+      const cv = document.createElement('canvas'); cv.width=fw.clientWidth; cv.height=fw.clientHeight; fw.appendChild(cv);
+      const ctx = cv.getContext('2d');
+      const sparks=[];
+      function burst(){
+        const x = Math.random()*cv.width, y = Math.random()*cv.height*0.5 + 40;
+        for(let i=0;i<150;i++){
+          const a = Math.random()*Math.PI*2; const sp = 1+Math.random()*3;
+          sparks.push({x,y,dx:Math.cos(a)*sp,dy:Math.sin(a)*sp+0.5,life:80+Math.random()*40});
+        }
+      }
+      setInterval(burst, 900); burst();
+      (function anim(){
+        ctx.fillStyle='rgba(0,0,0,0.22)'; ctx.fillRect(0,0,cv.width,cv.height);
+        for(let i=sparks.length-1;i>=0;i--){ const p=sparks[i]; p.x+=p.dx; p.y+=p.dy; p.life--; if(p.life<=0) sparks.splice(i,1); else { ctx.fillStyle='rgba(255,255,255,.95)'; ctx.fillRect(p.x,p.y,2,2);} }
+        requestAnimationFrame(anim);
+      })();
+      // Сердце
+      const heart = $('#heart'); const secret = $('#secret');
+      heart.addEventListener('click', ()=>{ secret.style.display='block'; secret.classList.add('fade-enter'); });
+    }
+  </script>
+</body>
+</html>
